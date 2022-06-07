@@ -2,7 +2,7 @@ CC=gcc
 FILE=ftp_download.c
 NAME=download
 HOST=mirrors.up.pt
-PATH=pub
+PATH=pub/debian
 USER=anonymous
 PASSWORD=anonymous
 PROTOCOL=ftp
@@ -15,3 +15,6 @@ auth:
 
 no_auth:
 	./$(NAME) $(PROTOCOL)://$(HOST)/$(PATH)/
+
+rm:
+	RM README.html
