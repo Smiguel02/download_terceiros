@@ -17,4 +17,4 @@ no_auth:
 	./$(NAME) $(PROTOCOL)://$(HOST)/$(PATH)/
 
 rm:
-	RM README.html
+	rm README.html

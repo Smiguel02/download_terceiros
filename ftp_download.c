@@ -1,6 +1,6 @@
 /**
  * @file ftp_download.c
- * @author Miguel&Maria (you@domain.com)
+ * @author Miguel&Maria
  * @brief
  * @version 0.1
  * @date 2022-06-05
@@ -283,6 +283,8 @@ int passive_mode_2(int com_socket)
 int read_file(int sockfd, char *filename)
 {
 	char buf[1024] = {0};
+	int lenght = 0, cnt = 0;
+	char new_buf[1024] = {0};
 
 	// Opens file to print to
 	FILE *f = fopen(filename, "w");
@@ -293,15 +295,15 @@ int read_file(int sockfd, char *filename)
 		return -1;
 	}
 
-	sleep(0.5);
-	memset(buf, '\0', sizeof(buf));
-	while (recv(sockfd, buf, sizeof(buf), MSG_DONTWAIT))
+	while (lenght = recv(sockfd, buf, sizeof(buf), 0))
 	{
 		fprintf(f, "%s", buf);
+		cnt += lenght;
 		memset(buf, '\0', sizeof(buf));
 	}
+	free(f);
 	fclose(f);
-	printf("Read file\n");
+	printf("Read %d Bytes from file\n", cnt);
 	return 0;
 }
 
