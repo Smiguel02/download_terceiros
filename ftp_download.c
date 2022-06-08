@@ -7,12 +7,12 @@
  *
  * @copyright Copyright (c) 2022
  *
- */
+ **/
 
 /***
  * Learnings:
  *  - To send stuff, need to put \n to simulate ENTER
- *  - Need to sleep before receiving, 0.1s isnt enouh
+ *  - Need to //sleep before receiving, 0.1s isnt enouh
  *  - We dont receive the things we send, just in case, it was verificated for fun ahaha
  *
  *
@@ -37,7 +37,6 @@
 #define USER "anonymous"
 #define PASSWORD "anonymous"
 #define BEGGINING 6
-#define DOWNLOAD "README.html"
 
 typedef struct
 {
@@ -76,7 +75,7 @@ void print_url()
 }
 
 // Reads desirable to new and updates string
-void read_substring(char *string, char parameter, char *new)
+int read_substring(char *string, char parameter, char *new)
 {
 
 	int i = 0;
@@ -85,14 +84,14 @@ void read_substring(char *string, char parameter, char *new)
 		new[i] = string[i];
 		i++;
 	}
-	if (parameter != '\0')
+	if (string[i] != '\0')
 	{
 		strcpy(&string[0], &string[i + 1]);
-		return;
+		return 0;
 	}
 
 	strcpy(&string[0], &string[i]);
-	return;
+	return 1;
 }
 
 int define_url(char *url_string)
@@ -154,7 +153,10 @@ int define_url(char *url_string)
 	strcpy(url.host_name, h->h_name);
 	url.port = PORT;
 	memset(url.filename, '\0', sizeof(url.filename)); // reinicia buffer
-	strcpy(url.filename, DOWNLOAD);
+	strcpy(string, url.path);
+	while (!read_substring(string, '/', url.filename))
+	{
+	}
 	print_url();
 
 	return 0;
@@ -186,16 +188,17 @@ int begin_connection(int port, char *ip)
 	return sockfd;
 }
 
-int read_socket(int sockfd, char *buf, int n, char *command)
+char *read_socket(int sockfd, char *buf, int n, char *command)
 {
 
 	do
 	{
-		sleep(0.1);
 		memset(buf, '\0', sizeof(buf)); // reinicia buffer
 		recv(sockfd, buf, n, MSG_DONTWAIT);
 		printf("%s", buf);
 	} while (strstr(buf, command) == NULL);
+
+	return &buf[4];
 }
 
 int passive_mode(int com_socket)
@@ -214,45 +217,6 @@ int passive_mode(int com_socket)
 	while (!recv(com_socket, buf, sizeof(buf), 0))
 	{
 		printf("Did not receive Passive mode info\n");
-		sleep(1);
-	}
-
-	if (strstr(buf, "227") == NULL)
-	{
-		printf("Error reading passive mode\n");
-		return -1;
-	}
-	printf("%s", buf);
-
-	// Reads port that passive mode is connected to, working
-	while (cnt < 5)
-	{
-		memset(aux, '\0', sizeof(aux)); // reinicia buffer
-		read_substring(buf, ',', aux);
-		cnt++;
-	}
-	printf("First value : %s\n", aux);
-	port = atoi(aux) * 256;
-	memset(aux, '\0', sizeof(aux)); // reinicia buffer
-	read_substring(buf, ')', aux);
-	printf("Second value : %s\n", aux);
-	port += atoi(aux);
-	printf("Data socket Port: %d\n", port);
-
-	return begin_connection(port, url.ip);
-}
-
-int passive_mode_2(int com_socket)
-{
-	char buf[256], aux[256];
-	int cnt = 0, data_socket;
-	int port, lenght;
-
-	memset(buf, '\0', sizeof(buf)); // reinicia buffer
-	while (!recv(com_socket, buf, sizeof(buf), 0))
-	{
-		printf("Did not receive Passive mode info\n");
-		sleep(1);
 	}
 
 	if (strstr(buf, "227") == NULL)
@@ -282,7 +246,7 @@ int passive_mode_2(int com_socket)
 
 int read_file(int sockfd, char *filename)
 {
-	char buf[1024] = {0};
+	char buf[512] = {0};
 	int lenght = 0, cnt = 0;
 	char new_buf[1024] = {0};
 
@@ -294,17 +258,26 @@ int read_file(int sockfd, char *filename)
 		printf("Failed to open file\n");
 		return -1;
 	}
+	int bytes, counter = 0;
 
-	while (lenght = recv(sockfd, buf, sizeof(buf), 0))
+	while ((lenght = recv(sockfd, buf, sizeof(buf), 0)) > 0)
 	{
-		fprintf(f, "%s", buf);
+		bytes = fwrite(buf, 1, lenght, f);
+		if (bytes != lenght)
+		{
+			printf("Oh boy u re dead\n");
+		}
 		cnt += lenght;
+		counter += bytes;
 		memset(buf, '\0', sizeof(buf));
 	}
+
 	free(f);
 	fclose(f);
 	printf("Read %d Bytes from file\n", cnt);
-	return 0;
+	printf("Read %d Bytes from file\n", counter);
+
+	return cnt;
 }
 
 int main(int argc, char *argv[])
@@ -330,14 +303,14 @@ int main(int argc, char *argv[])
 	com_socket = begin_connection(url.port, url.ip);
 
 	// sends user
-	sleep(1); // otherwise doesnt work
-	read_socket(com_socket, buf, sizeof(buf), "220");
+	sleep(0.1); // otherwise doesnt work
+	(void)read_socket(com_socket, buf, sizeof(buf), "220 ");
 	memset(buf, '\0', sizeof(buf));		   // reinicia buffer
 	sprintf(buf, "user %s\r\n", url.user); // correct
 	lenght = strlen(buf);
 	res = send(com_socket, buf, lenght, 0);
 	printf("%s", buf);
-	read_socket(com_socket, buf, sizeof(buf), "331");
+	(void)read_socket(com_socket, buf, sizeof(buf), "331 ");
 
 	// sends password
 	memset(buf, '\0', sizeof(buf)); // reinicia buffer
@@ -345,34 +318,46 @@ int main(int argc, char *argv[])
 	lenght = strlen(buf);
 	res = send(com_socket, buf, lenght, 0);
 	printf("%s", buf);
-	read_socket(com_socket, buf, sizeof(buf), "230");
+	(void)read_socket(com_socket, buf, sizeof(buf), "230 ");
 
 	// goes to path file
 	memset(buf, '\0', sizeof(buf)); // reinicia buffer
-	sprintf(buf, "cwd %s\r\n", url.path);
+	sprintf(buf, "size %s\r\n", url.path);
 	lenght = strlen(buf);
 	send(com_socket, buf, lenght, 0);
 	printf("%s", buf);
-	read_socket(com_socket, buf, sizeof(buf), "250");
+
+	char file_size_char[32];
+	strcpy(file_size_char, read_socket(com_socket, buf, sizeof(buf), "213 "));
+	int file_size = atoi(file_size_char);
+	printf("File Size is %d\n", file_size);
 
 	// enters passive mode
 	data_socket = passive_mode(com_socket);
 
 	memset(buf, '\0', sizeof(buf)); // reinicia buffer
-	sprintf(buf, "retr %s\r\n", url.filename);
+	sprintf(buf, "retr %s\r\n", url.path);
 	lenght = strlen(buf);
 	send(com_socket, buf, lenght, 0);
 	printf("%s", buf);
-	read_socket(com_socket, buf, sizeof(buf), "\n");
+	(void)read_socket(com_socket, buf, sizeof(buf), "\n");
 
 	memset(buf, '\0', sizeof(buf)); // reinicia buffer
-	sprintf(buf, "retr %s\r\n", url.filename);
+	sprintf(buf, "retr %s\r\n", url.path);
 	lenght = strlen(buf);
 	send(com_socket, buf, lenght, 0);
 	printf("%s", buf);
 
 	// receives everything
 	read_file(data_socket, url.filename);
+
+	// close com port
+	memset(buf, '\0', sizeof(buf)); // reinicia buffer
+	sprintf(buf, "quit\r\n");
+	lenght = strlen(buf);
+	send(com_socket, buf, lenght, 0);
+	printf("%s", buf);
+	(void)read_socket(com_socket, buf, sizeof(buf), "221 ");
 
 	// close connection
 	close(com_socket);
