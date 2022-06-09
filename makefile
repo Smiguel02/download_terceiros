@@ -17,6 +17,7 @@ no_auth:
 	./$(NAME) $(PROTOCOL)://$(HOST)/$(CAMINHO)
 
 rm:
+	rm kodi-epg.jpg
 	rm README.html
 
 test_1:
