@@ -77,7 +77,6 @@ void print_url()
 // Reads desirable to new and updates string
 int read_substring(char *string, char parameter, char *new)
 {
-
 	int i = 0;
 	while ((string[i] != parameter) && (string[i] != '\0'))
 	{
@@ -86,12 +85,9 @@ int read_substring(char *string, char parameter, char *new)
 	}
 	if (string[i] != '\0')
 	{
-		strcpy(&string[0], &string[i + 1]);
-		return 0;
+		return i + 1;
 	}
-
-	strcpy(&string[0], &string[i]);
-	return 1;
+	return i;
 }
 
 int define_url(char *url_string)
@@ -110,32 +106,28 @@ int define_url(char *url_string)
 		printf("No ftp:// included\n");
 		return -1;
 	}
-
-	// works just fine
-
 	url_string += 6;
 
-	// if not is 0 by default
 	if (url_string[0] == '[')
 	{
 		authentication = TRUE;
 		url_string++;
 	}
 
+	int cnt = 0;
 	switch (authentication)
 	{
 	case TRUE:
-		read_substring(url_string, ':', url.user);
-		read_substring(url_string, '@', url.password);
-		strcpy(url_string, &url_string[1]);
-		read_substring(url_string, '/', url.host);
-		read_substring(url_string, '\0', url.path); // resolver issue reading path
-
+		cnt += read_substring(url_string, ':', url.user);
+		cnt += read_substring(&url_string[cnt], '@', url.password);
+		cnt++;
+		cnt += read_substring(&url_string[cnt], '/', url.host);
+		cnt += read_substring(&url_string[cnt], '\0', url.path); // resolver issue reading path
 		break;
 
 	case FALSE:
-		read_substring(url_string, '/', url.host);
-		read_substring(url_string, '\0', url.path);
+		cnt = read_substring(url_string, '/', url.host);
+		cnt += read_substring(&url_string[cnt], '\0', url.path);
 		strcpy(url.user, "anonymous");
 		strcpy(url.password, "anonymous");
 
@@ -153,10 +145,11 @@ int define_url(char *url_string)
 	strcpy(url.host_name, h->h_name);
 	url.port = PORT;
 	memset(url.filename, '\0', sizeof(url.filename)); // reinicia buffer
-	strcpy(string, url.path);
-	while (!read_substring(string, '/', url.filename))
+	cnt = 0;
+	do
 	{
-	}
+		cnt += read_substring(&url.path[cnt], '/', url.filename);
+	} while (url.path[cnt] != '\0');
 	print_url();
 
 	return 0;
@@ -178,6 +171,7 @@ int begin_connection(int port, char *ip)
 		perror("socket()");
 		return -1;
 	}
+
 	/*connect to the server*/
 	if (connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
 	{
@@ -194,7 +188,7 @@ char *read_socket(int sockfd, char *buf, int n, char *command)
 	do
 	{
 		memset(buf, '\0', sizeof(buf)); // reinicia buffer
-		recv(sockfd, buf, n, MSG_DONTWAIT);
+		recv(sockfd, buf, n, 0);
 		printf("%s", buf);
 	} while (strstr(buf, command) == NULL);
 
@@ -224,19 +218,19 @@ int passive_mode(int com_socket)
 		printf("Error reading passive mode\n");
 		return -1;
 	}
-	printf("%s", buf);
 
 	// Reads port that passive mode is connected to, working
+	int help = 0;
 	while (cnt < 5)
 	{
 		memset(aux, '\0', sizeof(aux)); // reinicia buffer
-		read_substring(buf, ',', aux);
+		help += read_substring(&buf[help], ',', aux);
 		cnt++;
 	}
 	printf("First value : %s\n", aux);
 	port = atoi(aux) * 256;
 	memset(aux, '\0', sizeof(aux)); // reinicia buffer
-	read_substring(buf, ')', aux);
+	help += read_substring(&buf[help], ')', aux);
 	printf("Second value : %s\n", aux);
 	port += atoi(aux);
 	printf("Data socket Port: %d\n", port);
@@ -246,7 +240,7 @@ int passive_mode(int com_socket)
 
 int read_file(int sockfd, char *filename)
 {
-	char buf[512] = {0};
+	char buf[1024] = {0};
 	int lenght = 0, cnt = 0;
 	char new_buf[1024] = {0};
 
@@ -260,23 +254,22 @@ int read_file(int sockfd, char *filename)
 	}
 	int bytes, counter = 0;
 
+	printf("Starting to read\n");
 	while ((lenght = recv(sockfd, buf, sizeof(buf), 0)) > 0)
 	{
 		bytes = fwrite(buf, 1, lenght, f);
-		if (bytes != lenght)
-		{
-			printf("Oh boy u re dead\n");
-		}
 		cnt += lenght;
 		counter += bytes;
 		memset(buf, '\0', sizeof(buf));
+	}
+	if (cnt != counter)
+	{
+		printf("Oh boy you are dead\n");
 	}
 
 	free(f);
 	fclose(f);
 	printf("Read %d Bytes from file\n", cnt);
-	printf("Read %d Bytes from file\n", counter);
-
 	return cnt;
 }
 
@@ -303,7 +296,6 @@ int main(int argc, char *argv[])
 	com_socket = begin_connection(url.port, url.ip);
 
 	// sends user
-	sleep(0.1); // otherwise doesnt work
 	(void)read_socket(com_socket, buf, sizeof(buf), "220 ");
 	memset(buf, '\0', sizeof(buf));		   // reinicia buffer
 	sprintf(buf, "user %s\r\n", url.user); // correct
@@ -330,7 +322,6 @@ int main(int argc, char *argv[])
 	char file_size_char[32];
 	strcpy(file_size_char, read_socket(com_socket, buf, sizeof(buf), "213 "));
 	int file_size = atoi(file_size_char);
-	printf("File Size is %d\n", file_size);
 
 	// enters passive mode
 	data_socket = passive_mode(com_socket);
@@ -349,7 +340,11 @@ int main(int argc, char *argv[])
 	printf("%s", buf);
 
 	// receives everything
-	read_file(data_socket, url.filename);
+	if (file_size != read_file(data_socket, url.filename))
+	{
+		printf("File size error\n");
+		return -1;
+	}
 
 	// close com port
 	memset(buf, '\0', sizeof(buf)); // reinicia buffer
